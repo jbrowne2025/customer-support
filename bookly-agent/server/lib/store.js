@@ -54,17 +54,6 @@ function mapSupabaseOrder(row) {
   };
 }
 
-export async function fetchSupabaseOrder(orderNumber, email) {
-  const { data, error } = await getSupabaseClient()
-    .from(ORDERS_TABLE)
-    .select('*')
-    .eq('order_primary_email', email)
-    .eq('order_number', orderNumber)
-    .maybeSingle();
-  if (error) throw new Error(`Supabase order lookup failed: ${error.message}`);
-  return data ? mapSupabaseOrder(data) : null;
-}
-
 export async function fetchSupabaseOrdersForEmail(email) {
   const { data, error } = await getSupabaseClient()
     .from(ORDERS_TABLE)

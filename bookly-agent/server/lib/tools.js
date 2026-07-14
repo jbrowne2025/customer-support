@@ -5,7 +5,6 @@ import {
   refundRequiresHumanReview,
   createReturn,
   searchPolicies,
-  fetchSupabaseOrder,
   fetchSupabaseOrdersForEmail,
 } from './store.js';
 
@@ -17,7 +16,7 @@ export const toolDefinitions = [
   {
     name: 'lookup_order',
     description:
-      "Look up a customer's order(s) by account email against Bookly's live orders database, optionally narrowed to a single order number. Always confirm the customer's email before calling this - it acts as the identity check. If order_id is omitted, returns all orders on the account. Only returns order number, status, order date, and amount - no tracking number or carrier is available from this source, so never state those unless the customer already gave them to you.",
+      "Look up a customer's order(s) by account email against Bookly's live orders database, optionally narrowed to a single order number. Always confirm the customer's email before calling this - it acts as the identity check. The tool verifies the email has orders on file first, then (if given) checks the order number against that email's orders - order status is never shared until both checks pass. If order_id is omitted, returns all orders on the account. Only returns order number, status, order date, and amount - no tracking number or carrier is available from this source, so never state those unless the customer already gave them to you.",
     input_schema: {
       type: 'object',
       properties: {
@@ -75,17 +74,25 @@ export async function executeTool(name, input) {
   switch (name) {
     case 'lookup_order': {
       try {
+        // Step 1: verify identity - the email must have orders on file before
+        // any order number is checked or any status is shared.
+        const orders = await fetchSupabaseOrdersForEmail(input.email);
+        if (orders.length === 0) {
+          return { error: `No orders found for ${input.email}. Double-check the email on the account.` };
+        }
+
+        // Step 2: only now resolve a specific order number, scoped to that
+        // email's own orders - a mismatched order number never confirms
+        // whether it exists on someone else's account.
         if (input.order_id) {
-          const order = await fetchSupabaseOrder(input.order_id, input.email);
+          const normalized = input.order_id.trim().toLowerCase();
+          const order = orders.find((o) => o.orderId.toLowerCase() === normalized);
           if (!order) {
             return { error: `Order ${input.order_id} was not found on the account for ${input.email}.` };
           }
           return { order };
         }
-        const orders = await fetchSupabaseOrdersForEmail(input.email);
-        if (orders.length === 0) {
-          return { error: `No orders found for ${input.email}.` };
-        }
+
         return { orders };
       } catch (err) {
         return { error: err.message };
