@@ -24,7 +24,7 @@ cd bookly-agent
 # Server
 cd server
 npm install
-cp .env.example .env   # fill in ANTHROPIC_API_KEY, and SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY if you have a project
+cp .env.example .env   # fill in ANTHROPIC_API_KEY, and SUPABASE_URL / SUPABASE_SECRET_KEY if you have a project
 npm run dev             # http://localhost:8787
 
 # Client (separate terminal)
@@ -78,7 +78,7 @@ Mock accounts for the **return flow** (see `server/data/customers.json` / `order
 | `order_primary_email` | text |
 | `order_date_time` | timestamp |
 
-If Row Level Security is enabled on this table (Supabase's default for new tables), use the **`service_role`** key, not the anon key — the anon key will silently return zero rows instead of erroring, which would make the agent tell every customer "no orders found." The service_role key is safe here because `server/lib/supabaseClient.js` only ever runs server-side and is never sent to the browser; it should never be used in client-side code.
+If Row Level Security is enabled on this table (Supabase's default for new tables), use a **secret key** (`sb_secret_...`, Settings → API → Secret keys), not the publishable/anon key — the publishable key will silently return zero rows instead of erroring, which would make the agent tell every customer "no orders found." The secret key is safe here because `server/lib/supabaseClient.js` only ever runs server-side and is never sent to the browser; it should never be used in client-side code. (Projects still on Supabase's legacy key system can use `SUPABASE_SERVICE_ROLE_KEY` instead — see `server/lib/supabaseClient.js` for the fallback order.)
 
 ## Architecture
 
