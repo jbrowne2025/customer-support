@@ -10,10 +10,13 @@ export function getSupabaseClient() {
   if (client) return client;
 
   const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY;
+  // Prefer the service role key: this client only ever runs server-side, never
+  // reaches the browser, and the orders table has RLS enabled - the anon key
+  // would silently return zero rows instead of erroring, which is worse.
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY;
   if (!url || !key) {
     throw new Error(
-      'Supabase is not configured. Set SUPABASE_URL and SUPABASE_ANON_KEY in server/.env to enable order lookups.',
+      'Supabase is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in server/.env to enable order lookups.',
     );
   }
 
