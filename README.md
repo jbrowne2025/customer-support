@@ -4,15 +4,15 @@ A prototype customer support agent for **Bookly**, a fictional online bookstore.
 
 Handles three intents end to end:
 
-- **Order status** — looks up live order data by account email from a Supabase `orders` table
-- **Returns/refunds** — collects order, item, reason, and refund method, then enforces Bookly's return policy in code: a 30-day return window, explicit confirmation of the card on file before refunding to it, and mandatory human review for refunds of $1,000+
+- **Order status** — looks up live order data by account email from a Supabase `bookly_orders` table
+- **Returns/refunds** — collects order, item, reason, and refund method, then enforces Bookly's return policy in code: a 30-day return window, explicit confirmation of the card on file before refunding to it, and mandatory human review for refunds of $1,000+. Sourced from the same Supabase `bookly_orders` table as order status
 - **General policy questions** — shipping, returns, payments, password reset, cancellation — answered via a `search_policies` tool instead of the model's own memory
 
 ## Requirements
 
 - Node.js 20+ (built and tested on Node 22)
 - An Anthropic API key with access to `claude-opus-4-8`
-- A Supabase project with an `orders` table (see below) — optional; without it, `lookup_order` returns a clear "not configured" error instead of crashing, and everything else in the demo still works
+- A Supabase project with a `bookly_orders` table (see below) — optional; without it, `lookup_order` and `initiate_return` return a clear "not configured" error instead of crashing, and `search_policies` still works
 
 ## Setup
 
@@ -33,46 +33,27 @@ Open http://localhost:5174. The Vite dev server proxies `/api/*` to the Express 
 
 ## Try it
 
-- **Order status + clarifying question:** "Where's my order?" → the agent asks for your account email (and optionally an order number) before calling `lookup_order`. Try `harry@example.com` against your Supabase `orders` table.
-- **Multi-turn return flow:** "I want to return something" → the agent asks which order, which item, why, and how you'd like to be refunded, then calls `initiate_return`.
-  - `jane.doe@example.com` / order `BK-10198`, item `ITM-3` ($11, delivered 20 days ago) → auto-approved once the agent confirms the card on file with you.
-  - `jane.doe@example.com` / order `BK-10410`, item `ITM-6` ($1,450, delivered within the window) → eligible, but flagged for human review instead of auto-refunded (over the $1,000 threshold).
-  - `priya.shah@example.com` / order `BK-10042` (delivered 70+ days ago) → `eligible: false`, the agent explains why.
+- **Order status + clarifying question:** "Where's my order?" → the agent asks for your account email (and optionally an order number) before calling `lookup_order`. Try any email that has a row in your Supabase `bookly_orders` table.
+- **Multi-turn return flow:** "I want to return something" → the agent asks which order, which item, why, and how you'd like to be refunded, then calls `initiate_return`, reading item/delivery/payment detail from the same Supabase `bookly_orders` row. Pick any order in your table that's `delivered` and within 30 days of its `delivered_on` date to see it go eligible → details → confirmation → (for refunds of $1,000+) human review.
 - **General question:** "How long do I have to return something?" or "How do I reset my password?" → answered via `search_policies`, not the model's own memory.
 
-### Two order data sources (a deliberate seam, not an oversight)
+### Supabase table (single source of truth)
 
-`lookup_order` (order status) and `initiate_return` (refunds) read from **different stores**, because they need different data:
+Both `lookup_order` and `initiate_return` read from the same table (default name `bookly_orders`, configurable via `SUPABASE_ORDERS_TABLE`), shaped like:
 
-| | `lookup_order` | `initiate_return` |
+| column | type | used by |
 |---|---|---|
-| Source | Live Supabase `orders` table | Local mock JSON (`server/data/`) |
-| Fields available | order number, status, order date, amount | + item lines, delivered date, payment method |
-| Why | This is the data the user's real orders DB actually has | Return eligibility, refund amount, and card confirmation need item- and payment-level detail the Supabase table doesn't carry |
-
-In a real deployment these would be the same system (or the returns tool would call out to an OMS/payments service for the fields it's missing). For this demo, order-status lookups use whatever customers/orders actually exist in your Supabase project; the return-flow mock accounts below are separate and only exist locally.
-
-Mock accounts for the **return flow** (see `server/data/customers.json` / `orders.json` for full detail):
-
-| Email | Orders |
-|---|---|
-| `jane.doe@example.com` | `BK-10231` (shipped, in transit), `BK-10198` (delivered, return-eligible, $11), `BK-10410` (delivered, $1,450 — triggers human review) |
-| `marcus.lee@example.com` | `BK-10305` (processing, not yet shipped) |
-| `priya.shah@example.com` | `BK-10042` (delivered 70+ days ago, outside return window) |
-
-### Supabase table
-
-`lookup_order` expects a table (default name `orders`, configurable via `SUPABASE_ORDERS_TABLE`) shaped like:
-
-| column | type |
-|---|---|
-| `id` | int8 |
-| `created_at` | timestamptz |
-| `order_number` | text |
-| `order_status` | text |
-| `order_amount` | numeric |
-| `order_primary_email` | text |
-| `order_date_time` | timestamp |
+| `id` | int8 | — |
+| `created_at` | timestamptz | — |
+| `order_number` | text | both |
+| `order_status` | text | both |
+| `order_amount` | numeric | `lookup_order` (list view only) |
+| `order_primary_email` | text | both |
+| `order_date_time` | timestamp | `lookup_order` (list view only) |
+| `delivered_on` | date | `initiate_return` (30-day return window) |
+| `payment_last4` | text | `initiate_return` (card confirmation before refunding to it) |
+| `items` | jsonb — array of `{item_id, title, qty, price}` | `initiate_return` (which item is being returned, refund amount) |
+| `customer_name` | text | both (returned for optional personalization; not otherwise used) |
 
 If Row Level Security is enabled on this table (Supabase's default for new tables), use a **secret key** (`sb_secret_...`, Settings → API → Secret keys), not the publishable/anon key — the publishable key will silently return zero rows instead of erroring, which would make the agent tell every customer "no orders found." The secret key is safe here because `server/lib/supabaseClient.js` only ever runs server-side and is never sent to the browser; it should never be used in client-side code. (Projects still on Supabase's legacy key system can use `SUPABASE_SERVICE_ROLE_KEY` instead — see `server/lib/supabaseClient.js` for the fallback order.)
 
@@ -88,8 +69,10 @@ client (React/Vite)  →  POST /api/chat  →  server (Express)
                     │                          │                         │
               lookup_order              initiate_return            search_policies
                     │                          │                         │
-           Supabase `orders` table    local mock JSON (items,     local policy
-           (live order status)        delivery date, payment)     knowledge base
+                    └──── Supabase `bookly_orders` table ────┘   local policy
+                    (status/date/amount for lookup_order;        knowledge base
+                     + items/delivered_on/payment_last4
+                     for initiate_return)
 ```
 
 - `server/lib/systemPrompt.js` — persona, scope, and guardrails (identity check before order actions, no fabricating order/policy details, explicit card confirmation before refunding, ask before assuming).
@@ -104,4 +87,4 @@ client (React/Vite)  →  POST /api/chat  →  server (Express)
 - Conversation history is in-memory per server process — no persistence across restarts, no real auth (an email is treated as a lightweight identity check, not verified).
 - `search_policies` is a simple keyword-overlap search, not embeddings/RAG — good enough to demonstrate the tool-use pattern, but it can rank a tangentially-related policy above the best match on ambiguous phrasing.
 - No streaming — responses are returned as a single JSON payload per turn.
-- Order status and returns read from two different stores (see above) — a real deployment would unify them.
+- Created returns (`initiate_return`) are still tracked in an in-memory array, not written back to Supabase — a real deployment would persist them.
