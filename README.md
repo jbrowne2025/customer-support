@@ -5,7 +5,7 @@ A prototype customer support agent for **Bookly**, a fictional online bookstore.
 Handles three intents end to end:
 
 - **Order status** — looks up live order data by account email from a Supabase `orders` table
-- **Returns/refunds** — collects order, item, reason, and refund method, then enforces Bookly's return policy in code: a 30-day return window, explicit confirmation of the card on file before refunding to it, and mandatory human review for refunds of $1,000+
+- **Returns/refunds** — collects order, item, reason, and refund method, then enforces Bookly's return policy in code: a 30-day return window, explicit confirmation of the card on file before refunding to it, and mandatory human review for refunds.
 - **General policy questions** — shipping, returns, payments, password reset, cancellation — answered via a `search_policies` tool instead of the model's own memory
 
 ## Requirements
