@@ -8,8 +8,6 @@ Handles three intents end to end:
 - **Returns/refunds** — collects order, item, reason, and refund method, then enforces Bookly's return policy in code: a 30-day return window, explicit confirmation of the card on file before refunding to it, and mandatory human review for refunds of $1,000+
 - **General policy questions** — shipping, returns, payments, password reset, cancellation — answered via a `search_policies` tool instead of the model's own memory
 
-See `../PITCH_DECK.md` (or the shared slide deck) for the architecture rationale and key tradeoffs.
-
 ## Requirements
 
 - Node.js 20+ (built and tested on Node 22)
@@ -54,7 +52,7 @@ Open http://localhost:5174. The Vite dev server proxies `/api/*` to the Express 
 | Fields available | order number, status, order date, amount | + item lines, delivered date, payment method |
 | Why | This is the data the user's real orders DB actually has | Return eligibility, refund amount, and card confirmation need item- and payment-level detail the Supabase table doesn't carry |
 
-In a real deployment these would be the same system (or the returns tool would call out to an OMS/payments service for the fields it's missing) — see `PITCH_DECK.md` → "What I'd do differently." For this demo, order-status lookups use whatever customers/orders actually exist in your Supabase project; the return-flow mock accounts below are separate and only exist locally.
+In a real deployment these would be the same system (or the returns tool would call out to an OMS/payments service for the fields it's missing). For this demo, order-status lookups use whatever customers/orders actually exist in your Supabase project; the return-flow mock accounts below are separate and only exist locally.
 
 Mock accounts for the **return flow** (see `server/data/customers.json` / `orders.json` for full detail):
 
