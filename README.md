@@ -5,7 +5,7 @@ A prototype customer support agent for **Bookly**, a fictional online bookstore.
 Handles three intents end to end:
 
 - **Order status** — looks up live order data by account email from a Supabase `bookly_orders` table
-- **Returns/refunds** — collects order, item, reason, and refund method, then enforces Bookly's return policy in code: a 30-day return window, explicit confirmation of the card on file before refunding to it, and mandatory human review for refunds of $1,000+. Sourced from the same Supabase `bookly_orders` table as order status
+- **Returns/refunds** — collects order, item, reason, and refund method, then enforces Bookly's return policy in code: a 30-day return window, explicit confirmation of the card on file before refunding to it, and mandatory human review for every return regardless of amount — no refund is auto-approved. Sourced from the same Supabase `bookly_orders` table as order status
 - **General policy questions** — shipping, returns, payments, password reset, cancellation — answered via a `search_policies` tool instead of the model's own memory
 
 ## Requirements
@@ -34,7 +34,7 @@ Open http://localhost:5174. The Vite dev server proxies `/api/*` to the Express 
 ## Try it
 
 - **Order status + clarifying question:** "Where's my order?" → the agent asks for your account email (and optionally an order number) before calling `lookup_order`. Try any email that has a row in your Supabase `bookly_orders` table.
-- **Multi-turn return flow:** "I want to return something" → the agent asks which order, which item, why, and how you'd like to be refunded, then calls `initiate_return`, reading item/delivery/payment detail from the same Supabase `bookly_orders` row. Pick any order in your table that's `delivered` and within 30 days of its `delivered_on` date to see it go eligible → details → confirmation → (for refunds of $1,000+) human review.
+- **Multi-turn return flow:** "I want to return something" → the agent asks which order, which item, why, and how you'd like to be refunded, then calls `initiate_return`, reading item/delivery/payment detail from the same Supabase `bookly_orders` row. Pick any order in your table that's `delivered` and within 30 days of its `delivered_on` date to see it go eligible → details → confirmation → human review (every return goes to review, regardless of amount).
 - **General question:** "How long do I have to return something?" or "How do I reset my password?" → answered via `search_policies`, not the model's own memory.
 
 ### Supabase table (single source of truth)
@@ -76,7 +76,7 @@ client (React/Vite)  →  POST /api/chat  →  server (Express)
 ```
 
 - `server/lib/systemPrompt.js` — persona, scope, and guardrails (identity check before order actions, no fabricating order/policy details, explicit card confirmation before refunding, ask before assuming).
-- `server/lib/tools.js` — tool schemas + execution. Business rules (identity match, 30-day return window, $1,000 human-review threshold, card confirmation) are enforced in code, not left to the model.
+- `server/lib/tools.js` — tool schemas + execution. Business rules (identity match, 30-day return window, mandatory human review for every return, card confirmation) are enforced in code, not left to the model.
 - `server/lib/supabaseClient.js` — lazy Supabase client; throws a clear, catchable error if unconfigured rather than crashing the server at boot.
 - `server/lib/agent.js` — the tool-use loop: calls Claude, executes any requested tools, feeds results back, repeats until the model returns a final text answer (capped at 6 iterations).
 - `server/index.js` — Express app; keeps an in-memory conversation history per `sessionId` (mock only — resets on restart).

@@ -1,6 +1,5 @@
 import {
   checkReturnEligibility,
-  refundRequiresHumanReview,
   createReturn,
   searchPolicies,
   fetchSupabaseOrdersForEmail,
@@ -27,7 +26,7 @@ export const toolDefinitions = [
   {
     name: 'initiate_return',
     description:
-      'Start a return/refund for a specific item on a specific order. Only call this after the customer has confirmed the order ID, which item they want to return, and their reason. This tool enforces Bookly return policy in code: (1) the order must be delivered and within the 30-day return window - returns eligible:false with a reason otherwise; (2) if refund_method is original_payment, the customer must have confirmed the last 4 digits of the card on file (see cardLast4Masked from lookup_order) - pass them as payment_confirmation_last4, or the tool returns confirmationRequired:true instead of processing; (3) refunds of $1000 or more are never auto-approved - the tool returns requiresReview:true and creates a pending case for a human specialist instead of an instant refund, even when eligible and confirmed.',
+      'Start a return/refund for a specific item on a specific order. Only call this after the customer has confirmed the order ID, which item they want to return, and their reason. This tool enforces Bookly return policy in code: (1) the order must be delivered and within the 30-day return window - returns eligible:false with a reason otherwise; (2) if refund_method is original_payment, the customer must have confirmed the last 4 digits of the card on file (see cardLast4Masked from lookup_order) - pass them as payment_confirmation_last4, or the tool returns confirmationRequired:true instead of processing; (3) no refund is ever auto-approved, regardless of amount - the tool always creates a pending case for a human specialist instead of an instant refund, even when eligible and confirmed.',
     input_schema: {
       type: 'object',
       properties: {
@@ -135,16 +134,13 @@ export async function executeTool(name, input) {
         }
       }
 
-      const refundAmount = item.price * item.qty;
-      const requiresReview = refundRequiresHumanReview(refundAmount);
       const record = createReturn({
         order,
         item,
         reason: input.reason,
         refundMethod: input.refund_method,
-        requiresReview,
       });
-      return { eligible: true, requiresReview, return: record };
+      return { eligible: true, requiresReview: true, return: record };
     }
 
     case 'search_policies': {
